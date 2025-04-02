@@ -1,0 +1,24 @@
+# macOS specific
+.DS_Store
+
+# Xcode specific
+*.xcworkspace
+*.xcodeproj/project.xcworkspace
+*.xcodeproj/xcuserdata/
+
+# JUCE specific
+JuceLibraryCode/
+Build/
+.idea/
+.vscode/
+
+# System files
+Thumbs.db
+Desktop.ini
+
+# Log files
+*.log
+
+# Swap files
+*.swp
+
