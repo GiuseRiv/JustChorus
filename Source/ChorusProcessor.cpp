@@ -35,6 +35,15 @@ void ChorusProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     }
 }
 
+// Helper function for interpolating delay samples
+float ChorusProcessor::getInterpolatedSample(const float* buffer, int bufferSize, int index, float delayOffset)
+{
+    int index1 = index;
+    int index2 = (index1 + 1) % bufferSize;  // Wrap around the buffer
+    float frac = delayOffset - std::floor(delayOffset);  // Fractional part of delay
+    return buffer[index1] * (1.0f - frac) + buffer[index2] * frac;  // Linear interpolation
+}
+
 void ChorusProcessor::updateParameters(const juce::AudioProcessorValueTreeState& apvts)
 {
     setRate(*apvts.getRawParameterValue("rate"));
@@ -51,7 +60,7 @@ void ChorusProcessor::process(juce::dsp::ProcessContextReplacing<float>& context
     for (int ch = 0; ch < numChannels; ++ch)
     {
         float* channelData = block.getChannelPointer(ch);
-        
+
         // Ensure the delay line exists for this channel
         if (ch >= delayLines.size() || delayLines[ch] == nullptr)
             continue;
@@ -60,35 +69,35 @@ void ChorusProcessor::process(juce::dsp::ProcessContextReplacing<float>& context
 
         for (int sample = 0; sample < numSamples; ++sample)
         {
-            // Generate LFO value per sample (Sine wave modulation)
+            // Generate LFO value per sample
             float lfoValue = std::sin(lfoPhase);
-            
-            // Convert LFO output to delay time in samples
-            float delayTimeSamples = (lfoValue * 0.5f + 0.5f) * (depth * sampleRate * 0.001f);
+
+            // Optionally apply smoothing to the LFO (if you have smoothedLfoValue & lfoSmoothingFactor defined)
+            smoothedLfoValue = smoothedLfoValue + (lfoValue - smoothedLfoValue) * lfoSmoothingFactor;
+
+            // Map the smoothed LFO output to a delay time (in samples)
+            float delayTimeSamples = (smoothedLfoValue * 0.5f + 0.5f) * (depth * sampleRate * 0.001f);
 
             // Set the delay time dynamically
             delayLine->setDelay(delayTimeSamples);
 
-            // Process the sample through the delay line
+            // Retrieve the delayed sample using popSample()
             float delayedSample = delayLine->popSample(0, delayTimeSamples);
 
             // Mix dry and wet signals
             float inputSample = channelData[sample];
             channelData[sample] = inputSample * (1.0f - mix) + delayedSample * mix;
 
-            // Store the current input sample in the delay line
+            // Push the current input sample into the delay line for the next iteration
             delayLine->pushSample(0, inputSample);
 
             // Update LFO phase
             lfoPhase += juce::MathConstants<float>::twoPi * rate / sampleRate;
-
-            // Keep `lfoPhase` in the range [0, 2π]
             if (lfoPhase > juce::MathConstants<float>::twoPi)
                 lfoPhase -= juce::MathConstants<float>::twoPi;
         }
     }
 }
-
 
 
 void ChorusProcessor::reset()
@@ -115,3 +124,6 @@ void ChorusProcessor::setMix(float newMix)
 {
     mix = newMix;
 }
+
+
+

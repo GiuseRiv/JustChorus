@@ -34,6 +34,9 @@ public:
     void setDepth(float newDepth);
     void setMix(float newMix);
     
+    //method for interpolation
+    float getInterpolatedSample(const float* buffer, int bufferSize, int index, float delayOffset);
+    
 private:
     // DSP variables.
     float sampleRate { 44100.0f };
@@ -44,6 +47,8 @@ private:
     float depth { 10.0f };   // Modulation depth in milliseconds.
     float mix { 0.5f };      // Wet/dry mix (0.0 to 1.0).
     float lfoPhase { 0.0f };  // LFO phase for chorus modulation
+    float smoothedLfoValue { 0.0f };
+    float lfoSmoothingFactor { 0.05f }; // Controls the smoothness of LFO transitions
     
     // JUCE DSP delay lines – one per channel.
     juce::OwnedArray<juce::dsp::DelayLine<float>> delayLines;
