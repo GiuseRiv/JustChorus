@@ -34,11 +34,14 @@ public:
     void setDepth(float newDepth);
     void setMix(float newMix);
     
-    // Linear interpolation method (for reference).
+    // Linear interpolation method (for reference). (DEPRECATED)
     float getInterpolatedSample(const float* buffer, int bufferSize, int index, float delayOffset);
     
-    // Cubic interpolation method.
+    // Cubic interpolation method. (DEPRECATED)
     float getCubicInterpolatedSample(const float* buffer, int bufferSize, float delayIndex);
+    
+    // Band-limited interpolation method
+    float getBandLimitedInterpolatedSample(const float* buffer, int bufferSize, float delayIndex);
     
 private:
     // DSP variables.

@@ -11,6 +11,7 @@
 #include <cmath>
 
 // Linear interpolation (for reference)
+//DEPRECATED
 float ChorusProcessor::getInterpolatedSample(const float* buffer, int bufferSize, int index, float delayOffset)
 {
     int index1 = index;
@@ -20,6 +21,7 @@ float ChorusProcessor::getInterpolatedSample(const float* buffer, int bufferSize
 }
 
 // Cubic interpolation using four samples.
+//DEPRECATED
 float ChorusProcessor::getCubicInterpolatedSample(const float* buffer, int bufferSize, float delayIndex)
 {
     int index = static_cast<int>(std::floor(delayIndex));
@@ -47,6 +49,45 @@ float ChorusProcessor::getCubicInterpolatedSample(const float* buffer, int buffe
 
     return ((a0 * frac + a1) * frac + a2) * frac + a3;
 }
+
+float ChorusProcessor::getBandLimitedInterpolatedSample(const float* buffer, int bufferSize, float delayIndex)
+{
+    const int kernelRadius = 8; // Half-width of the interpolation kernel
+    float result = 0.0f;
+    float sum = 0.0f;
+    
+    int baseIndex = static_cast<int>(std::floor(delayIndex));
+    float frac = delayIndex - baseIndex;
+    
+    // Loop over the kernel window
+    for (int i = -kernelRadius; i <= kernelRadius; i++)
+    {
+        // Compute the sample index (wrap around if necessary)
+        int sampleIndex = baseIndex + i;
+        while (sampleIndex < 0)
+            sampleIndex += bufferSize;
+        while (sampleIndex >= bufferSize)
+            sampleIndex -= bufferSize;
+        
+        // x is the distance from the actual delay position
+        float x = static_cast<float>(i) - frac;
+        
+        // Compute the sinc function; handle x==0 to avoid division by zero
+        float sincValue = (std::abs(x) < 1e-6f) ? 1.0f : std::sin(M_PI * x) / (M_PI * x);
+        
+        // Apply a Hann window to taper the sinc function.
+        // The Hann window is defined over [-kernelRadius, kernelRadius].
+        float window = 0.5f * (1.0f + std::cos((M_PI * x) / kernelRadius));
+        
+        float weight = sincValue * window;
+        result += buffer[sampleIndex] * weight;
+        sum += weight;
+    }
+    
+    // Normalize to preserve amplitude
+    return result / sum;
+}
+
 
 void ChorusProcessor::prepare(const juce::dsp::ProcessSpec& spec)
 {
@@ -111,7 +152,7 @@ void ChorusProcessor::process(juce::dsp::ProcessContextReplacing<float>& context
                 readPos += maxDelaySamples;
             
             // Retrieve delayed sample using cubic interpolation.
-            float delayedSample = getCubicInterpolatedSample(buffer.data(), maxDelaySamples, readPos);
+            float delayedSample = getBandLimitedInterpolatedSample(buffer.data(), maxDelaySamples, readPos);
             
             // Mix the dry and wet signals.
             float inputSample = channelData[sample];
