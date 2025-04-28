@@ -55,6 +55,8 @@ private:
     float lfoPhase { 0.0f };  // LFO phase for chorus modulation.
     float smoothedLfoValue { 0.0f };
     float lfoSmoothingFactor { 0.05f }; // Controls the smoothness of LFO transitions.
+    float lfoSmoothCoeff = 0.1f; // Lower = more smoothing, adjust as needed
+
     
     // Raw circular delay buffers – one per channel.
     //i did not use JUCE's delayline because it does not expose methods to access pointes in the buffer
@@ -62,6 +64,8 @@ private:
     std::vector<int> writePositions;
     int maxDelaySamples { 0 };
     
+    std::unique_ptr<juce::dsp::Oversampling<float>> oversampler;
+
     // JUCE DSP oscillator as the LFO.
     juce::dsp::Oscillator<float> lfo;
     

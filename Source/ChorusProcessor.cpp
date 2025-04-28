@@ -117,6 +117,17 @@ void ChorusProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     writePositions.clear();
     writePositions.resize(numChannels, 0);
     
+    //per oversampling
+    int factor = 4; // 4x oversampling 
+    oversampler = std::make_unique<juce::dsp::Oversampling<float>>(
+        numChannels,
+        static_cast<int>(std::log2(factor)),
+        juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR,
+        true
+    );
+    oversampler->reset();
+    oversampler->initProcessing(static_cast<size_t>(spec.maximumBlockSize));
+    
     for (int ch = 0; ch < numChannels; ++ch)
     {
         delayBuffers[ch].assign(maxDelaySamples, 0.0f);
@@ -125,64 +136,67 @@ void ChorusProcessor::prepare(const juce::dsp::ProcessSpec& spec)
 
 void ChorusProcessor::process(juce::dsp::ProcessContextReplacing<float>& context)
 {
-    // First, process the signal through the low pass filter.
-    lowPassFilter.process(context);
-    
-    auto block = context.getOutputBlock();
-    int numSamples = static_cast<int>(block.getNumSamples());
-    
+    auto oversampledBlock = oversampler->processSamplesUp(context.getOutputBlock());
+
+    juce::dsp::AudioBlock<float> block(oversampledBlock);
+    auto sampleRateOS = sampleRate * oversampler->getOversamplingFactor();
+    auto numSamples = static_cast<int>(block.getNumSamples());
+
     for (int ch = 0; ch < numChannels; ++ch)
     {
         float* channelData = block.getChannelPointer(ch);
         auto& buffer = delayBuffers[ch];
         int& writePos = writePositions[ch];
-        
+
         for (int sample = 0; sample < numSamples; ++sample)
         {
-            // Generate the LFO value and smooth it.
-            float lfoValue = std::sin(lfoPhase);
-            smoothedLfoValue += (lfoValue - smoothedLfoValue) * lfoSmoothingFactor;
-            
-            // Calculate the delay time in samples.
-            float delayTimeSamples = (smoothedLfoValue * 0.5f + 0.5f) * (depth * sampleRate * 0.001f);
-            
-            // Calculate the read position (taking the circular buffer wrap into account).
+            float rawLfo = std::sin(lfoPhase);
+            smoothedLfoValue = lfoSmoothCoeff * rawLfo + (1.0f - lfoSmoothCoeff) * smoothedLfoValue;
+
+            float modDepthFactor = 0.4f;
+            float baseDelaySamples = depth * sampleRateOS * 0.001f;
+            float modulator = ((smoothedLfoValue * 0.5f) + 0.5f) * modDepthFactor;
+            float delayTimeSamples = baseDelaySamples * modulator;
+
             float readPos = static_cast<float>(writePos) - delayTimeSamples;
             if (readPos < 0)
                 readPos += maxDelaySamples;
-            
-            // Retrieve delayed sample using cubic interpolation.
+
             float delayedSample = getBandLimitedInterpolatedSample(buffer.data(), maxDelaySamples, readPos);
-            
-            // Mix the dry and wet signals.
+
+            float dryMix = 1.0f - mix * 0.8f;
+            float wetMix = mix;
             float inputSample = channelData[sample];
-            channelData[sample] = inputSample * (1.0f - mix) + delayedSample * mix;
-            
-            // Write the current sample into the delay buffer.
+            channelData[sample] = inputSample * dryMix + delayedSample * wetMix;
+
             buffer[writePos] = inputSample;
             writePos = (writePos + 1) % maxDelaySamples;
-            
-            // Update the LFO phase.
-            lfoPhase += juce::MathConstants<float>::twoPi * rate / sampleRate;
+
+            lfoPhase += juce::MathConstants<float>::twoPi * rate / sampleRateOS;
             if (lfoPhase > juce::MathConstants<float>::twoPi)
                 lfoPhase -= juce::MathConstants<float>::twoPi;
         }
     }
+
+    oversampler->processSamplesDown(context.getOutputBlock());
 }
+
 
 void ChorusProcessor::reset()
 {
-    // Reset filter and LFO states.
+    if (oversampler)
+        oversampler->reset();
+
     lowPassFilter.reset();
     lfo.reset();
-    
-    // Clear delay buffers and reset write positions.
+
     for (int ch = 0; ch < numChannels; ++ch)
     {
         std::fill(delayBuffers[ch].begin(), delayBuffers[ch].end(), 0.0f);
         writePositions[ch] = 0;
     }
 }
+
 
 void ChorusProcessor::updateParameters(const juce::AudioProcessorValueTreeState& apvts)
 {
@@ -199,8 +213,10 @@ void ChorusProcessor::setRate(float newRate)
 
 void ChorusProcessor::setDepth(float newDepth)
 {
-    depth = newDepth;
+    // Optional clamp or scale
+    depth = std::clamp(newDepth, 0.5f, 10.0f); // For example, 0.5ms to 10ms range
 }
+
 
 void ChorusProcessor::setMix(float newMix)
 {
