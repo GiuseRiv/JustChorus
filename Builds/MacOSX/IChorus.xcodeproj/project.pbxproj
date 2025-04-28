@@ -365,7 +365,6 @@
 			isa = PBXGroup;
 			children = (
 				D536737FBAB4957C310CB1ED /* Source */,
-				0490A7F12DBF89A2000C9338 /* .gitignore */,
 			);
 			name = IChorus;
 			sourceTree = "<group>";
@@ -416,6 +415,7 @@
 		7AD54D16375A1D4092146C7F /* Source */ = {
 			isa = PBXGroup;
 			children = (
+				0490A7F12DBF89A2000C9338 /* .gitignore */,
 				37EBDAF4F8EEBBDC5CD2A68C /* IChorus */,
 				B8AEF3885DA4D5F84B81BF02 /* JUCE Modules */,
 				4C76292294769E11B3E61382 /* JUCE Library Code */,
